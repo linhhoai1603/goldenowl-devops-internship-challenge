@@ -1,30 +1,36 @@
-# DevOps interns assignment - Technical Test	
-We think infrastructure is best represented as code, and provisioning of resources should be automated as much as possible.	
+# Golden Owl DevOps Internship - Technical Test
+At Golden Owl, we believe in treating infrastructure as code and automating resource provisioning to the fullest extent possible. 
 
- Your task is to create a CI build pipeline that deploys this web application to a load-balanced	
-environment. You are free to complete the test in a local environment (using tools like Vagrant and	
-Docker) or use any CI service, provisioning tool and cloud environment you feel comfortable with (we	
-recommend creating a free tier account so you don't incur any costs).	
+In this technical test, we challenge you to create a robust CI build pipeline using GitHub Actions. You have the freedom to complete this test in your local environment.
 
- * Your CI job should:	
-  * Run when a feature branch is pushed to Github (you should fork this repository to your Github account).
-  * If you are working locally feel free to use some other method for triggering your build.	
-  * Deploy to a target environment when the job is successful.	
-* The target environment should consist of:	
-  * A nginx load-balancer accessible via HTTP on port 80.	
-  * Two application servers (this repository) accessible via HTTP on port 3000.
-* The load-balancer should use a round-robin strategy.	
-* The application server should return the response "Hi there! I'm being served from {hostname}!".	
+## Your Mission 🌟
+Your mission, should you choose to accept it, is to craft a CI job that:
+- `Forks` this repository to your own GitHub account.
+- Dockerizes a Node.js application.
+- Establishes an automated CI build process using GitHub Actions and DockerHub.
+- Activates whenever a feature branch is pushed to GitHub.
 
- ## Context	
-We are testing your ability to implement modern automated infrastructure, as well as general knowledge of system administration. In your solution you should emphasize readability, maintainability and DevOps methodologies.	
+## The Bigger Picture 🌏
+This test is designed to evaluate your ability to implement modern automated infrastructure practices while demonstrating a basic understanding of Docker containers. In your solution, we encourage you to prioritize readability, maintainability, and the principles of DevOps.
 
- ## Submit your solution	
-Create a public Github repository and push your solution in it. Commit often - we would rather see a history of trial and error than a single monolithic push. When you're finished, send us the URL to the repository.	
+ ## Submission Guidelines 📬
+Your solution should be showcased in a public GitHub repository. We encourage you to commit early and often. We prefer to see a history of iterative progress rather than a single massive push. When you've completed the assignment, kindly share the URL of your repository with us.
 
- ## Running this web application	
- This is a NodeJS application:	This is a NodeJS application:
+ ## Running the Node.js Application Locally  🏃‍♂️
+ This is a Node.js application, and running it locally is straightforward:
+- Navigate to the `src` directory by executing `cd src`.
+- Install the project's dependencies listed in the package.json file by running `npm i`.
+- Execute `npm test` to run the application's tests.
+- Start the HTTP server with `npm start`.
 
-- `npm test` runs the application tests	- `npm test` runs the application tests
-- `npm start` starts the http server
-1
+You can test it using the following command:
+  
+```shell
+curl localhost:3000
+```
+You should receive the following response:
+```json
+{"message":"Welcome warriors to Golden Owl!"}
+```
+
+Are you ready to embark on this DevOps journey with us? 🚀 Best of luck with your assignment! 🌟
