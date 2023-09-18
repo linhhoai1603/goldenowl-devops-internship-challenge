@@ -7,8 +7,8 @@ In this technical test, we challenge you to create a robust CI build pipeline us
 Your mission, should you choose to accept it, is to craft a CI job that:
 - `Forks` this repository to your own GitHub account.
 - Dockerizes a Node.js application.
-- Establishes an automated CI build process using GitHub Actions and DockerHub.
-- Activates whenever a feature branch is pushed to GitHub.
+- Establishes an automated CI build process using GitHub Actions workflow and DockerHub.
+- Trigger CI tests when changes are pushed to the feature branch on GitHub.
 
 ## The Bigger Picture 🌏
 This test is designed to evaluate your ability to implement modern automated infrastructure practices while demonstrating a basic understanding of Docker containers. In your solution, we encourage you to prioritize readability, maintainability, and the principles of DevOps.
