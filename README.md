@@ -7,11 +7,12 @@ Docker) or use any CI service, provisioning tool and cloud environment you feel 
 recommend creating a free tier account so you don't incur any costs).	
 
  * Your CI job should:	
-  * Run when a feature branch is pushed to Github (you should fork this repository to your Github account). If you are working locally feel free to use some other method for triggering your build.	
+  * Run when a feature branch is pushed to Github (you should fork this repository to your Github account).
+  * If you are working locally feel free to use some other method for triggering your build.	
   * Deploy to a target environment when the job is successful.	
 * The target environment should consist of:	
-  * A load-balancer accessible via HTTP on port 80.	
-  * Two application servers (this repository) accessible via HTTP on port 3000.	
+  * A nginx load-balancer accessible via HTTP on port 80.	
+  * Two application servers (this repository) accessible via HTTP on port 3000.
 * The load-balancer should use a round-robin strategy.	
 * The application server should return the response "Hi there! I'm being served from {hostname}!".	
 
