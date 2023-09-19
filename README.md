@@ -11,6 +11,9 @@ Your mission, should you choose to accept it, is to craft a CI job that:
 4. Initiates CI tests automatically when changes are pushed to the feature branch on GitHub.
 5. Utilizes GitHub Actions for Continuous Deployment (CD) to deploy the application to freely available cloud services such as [fly.io](https://fly.io), [render.com](https://render.com) or major cloud providers like AWS, Google Cloud, or Azure (Please submit the deployment link).
 
+## Nice to have 🎨
+We would be genuinely delighted if you could complement your submission with a visual flow diagram, illustrating the sequence of tasks you performed. This additional touch would greatly enhance our understanding and appreciation of your work.
+
 ## The Bigger Picture 🌏
 This test is designed to evaluate your ability to implement modern automated infrastructure practices while demonstrating a basic understanding of Docker containers. In your solution, we encourage you to prioritize readability, maintainability, and the principles of DevOps.
 
