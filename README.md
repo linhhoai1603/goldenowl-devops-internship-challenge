@@ -7,7 +7,7 @@ In this technical test, we challenge you to create a robust CI build pipeline us
 Your mission, should you choose to accept it, is to craft a CI job that:
 1. Forks this repository to your personal GitHub account.
 2. Dockerizes a Node.js application.
-3. Establishes an automated CI/CD build process using GitHub Actions workflow and DockerHub.
+3. Establishes an automated CI/CD build process using GitHub Actions workflow and a container registry service such as DockerHub or Amazon Elastic Container Registry (ECR) or similar services.
 4. Initiates CI tests automatically when changes are pushed to the feature branch on GitHub.
 5. Utilizes GitHub Actions for Continuous Deployment (CD) to deploy the application to major cloud providers like AWS EC2, AWS ECS or Google Cloud (please submit the deployment link).
 ## Nice to have 🎨
