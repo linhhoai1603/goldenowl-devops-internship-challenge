@@ -11,7 +11,7 @@ Your mission, should you choose to accept it, is to craft a CI job that:
 4. Initiates CI tests automatically when changes are pushed to the feature branch on GitHub.
 5. Utilizes GitHub Actions for Continuous Deployment (CD) to deploy the application to major cloud providers like AWS EC2, AWS ECS or Google Cloud (please submit the deployment link).
 ## Nice to have 🎨
-We would be genuinely delighted if you could complement your submission with a `visual flow diagram`, illustrating the sequence of tasks you performed. This additional touch would greatly enhance our understanding and appreciation of your work.
+We would be genuinely delighted if you could complement your submission with a `visual flow diagram`, illustrating the sequence of tasks you performed, including the implementation of a `load balancer` and `auto scaling` for the deployed application. This additional touch would greatly enhance our understanding and appreciation of your work.
 
 Reference tools for creating visual flow diagrams:
 - https://www.drawio.com/
