@@ -9,8 +9,7 @@ Your mission, should you choose to accept it, is to craft a CI job that:
 2. Dockerizes a Node.js application.
 3. Establishes an automated CI/CD build process using GitHub Actions workflow and DockerHub.
 4. Initiates CI tests automatically when changes are pushed to the feature branch on GitHub.
-5. Utilizes GitHub Actions for Continuous Deployment (CD) to deploy the application to freely available cloud services such as [fly.io](https://fly.io), [render.com](https://render.com) or major cloud providers like AWS, Google Cloud, or Azure (please submit the deployment link).
-
+5. Utilizes GitHub Actions for Continuous Deployment (CD) to deploy the application to major cloud providers like AWS EC2, AWS ECS or Google Cloud (please submit the deployment link).
 ## Nice to have 🎨
 We would be genuinely delighted if you could complement your submission with a `visual flow diagram`, illustrating the sequence of tasks you performed. This additional touch would greatly enhance our understanding and appreciation of your work.
 
