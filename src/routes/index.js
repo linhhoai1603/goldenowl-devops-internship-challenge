@@ -14,6 +14,12 @@ router.get('/ci-cd', (req, res) => {
     }
     res.json(responseJson)
 })
+router.get('/hello', (req, res) => {
+    const responseJson = {
+        message: 'Hello World!',
+    }
+    res.json(responseJson)
+})
 
 
 module.exports = router
