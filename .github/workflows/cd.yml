@@ -1,0 +1,85 @@
+name: CD
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches:
+      - feature
+      - 'feature/**'
+  workflow_dispatch:
+
+concurrency:
+  group: cd-${{ github.event.workflow_run.head_branch || github.ref_name }}-${{ github.event.workflow_run.head_sha || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-push:
+    name: Build and push image
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./src
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/goldenowl-devops-app:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/goldenowl-devops-app:${{ github.event.workflow_run.head_sha || github.sha }}
+
+  deploy:
+    name: Deploy to EC2
+    needs: build-and-push
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/goldenowl-devops-app:latest
+          ENV_CONTENT: ${{ secrets.ENV_CONTENT }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          envs: DOCKERHUB_USERNAME,DOCKERHUB_TOKEN,IMAGE,ENV_CONTENT
+          script: |
+            set -euo pipefail
+            APP_DIR="$HOME/goldenowl-app"
+            ENV_FILE="$APP_DIR/.env"
+            mkdir -p "$APP_DIR"
+            printf '%s\n' "$ENV_CONTENT" > "$ENV_FILE"
+            chmod 600 "$ENV_FILE"
+            PORT="$(grep -E '^[[:space:]]*PORT[[:space:]]*=' "$ENV_FILE" | tail -1 | cut -d= -f2- | xargs)"
+            PORT="${PORT:-80}"
+            echo "$DOCKERHUB_TOKEN" | docker login -u "$DOCKERHUB_USERNAME" --password-stdin
+            docker pull "$IMAGE"
+            docker stop goldenowl-app 2>/dev/null || true
+            docker rm goldenowl-app 2>/dev/null || true
+            docker run -d \
+              --name goldenowl-app \
+              --restart unless-stopped \
+              -p "${PORT}:${PORT}" \
+              --env-file "$ENV_FILE" \
+              "$IMAGE"
+            docker image prune -f
