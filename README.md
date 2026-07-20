@@ -1,45 +1,260 @@
-# Golden Owl DevOps Internship - Technical Test
-At Golden Owl, we believe in treating infrastructure as code and automating resource provisioning to the fullest extent possible. 
+# Golden Owl DevOps Internship — Report & Operations Guide
 
-In this technical test, we challenge you to create a robust CI build pipeline using GitHub Actions. You have the freedom to complete this test in your local environment.
+**Deployed application:** [https://shuttlex.io.vn/](https://shuttlex.io.vn/)
 
-## Your Mission 🌟
-Your mission, should you choose to accept it, is to craft a CI job that:
-1. Forks this repository to your personal GitHub account.
-2. Dockerizes a Node.js application.
-3. Establishes an automated CI/CD build process using GitHub Actions workflow and a container registry service such as DockerHub or Amazon Elastic Container Registry (ECR) or similar services.
-4. Initiates CI tests automatically when changes are pushed to the feature branch on GitHub.
-5. Utilizes GitHub Actions for Continuous Deployment (CD) to deploy the application to major cloud providers like AWS EC2, AWS ECS or Google Cloud (please submit the deployment link).
-## Nice to have 🎨
-We would be genuinely delighted if you could complement your submission with a `visual flow diagram`, illustrating the sequence of tasks you performed, including the implementation of a `load balancer` and `auto scaling` for the deployed application. This additional touch would greatly enhance our understanding and appreciation of your work.
-
-Reference tools for creating visual flow diagrams:
-- https://www.drawio.com/
-- https://excalidraw.com/
-- https://www.eraser.io/
-  
-Including a visual representation of your workflow will provide valuable insights into your approach and make your submission stand out. Thank you for considering this enhancement! 
-## The Bigger Picture 🌏
-This test is designed to evaluate your ability to implement modern automated infrastructure practices while demonstrating a basic understanding of Docker containers. In your solution, we encourage you to prioritize readability, maintainability, and the principles of DevOps.
-
- ## Submission Guidelines 📬
-Your solution should be showcased in a public GitHub repository. We encourage you to commit early and often. We prefer to see a history of iterative progress rather than a single massive push. When you've completed the assignment, kindly share the URL of your repository with us.
-
- ## Running the Node.js Application Locally  🏃‍♂️
- This is a Node.js application, and running it locally is straightforward:
-- Navigate to the `src` directory by executing `cd src`.
-- Install the project's dependencies listed in the package.json file by running `npm i`.
-- Execute `npm test` to run the application's tests.
-- Start the HTTP server with `npm start`.
-
-You can test it using the following command:
-  
-```shell
-curl localhost:3000
-```
-You should receive the following response:
 ```json
 {"message":"Welcome warriors to Golden Owl!"}
 ```
 
-Are you ready to embark on this DevOps journey with us? 🚀 Best of luck with your assignment! 🌟
+This submission meets the technical test requirements: Dockerized Node.js app, CI on the `feature` branch, CD to AWS EC2 via GitHub Actions, images stored on Docker Hub, and `shuttlex.io.vn` served through Cloudflare (Flexible SSL).
+
+---
+
+## 1. Solution Summary
+
+| Item | Choice |
+|------|--------|
+| Application | Express (Node.js 20), `GET /` returns JSON |
+| Container | `src/Dockerfile` (Alpine, default port 80) |
+| Registry | Docker Hub — `linhhoai1603/goldenowl-devops-app` |
+| CI | Workflow `.github/workflows/ci.yml` — **tests only** on push/PR to `feature` |
+| CD | Workflow `.github/workflows/cd.yml` — on **push/merge to `master`**: re-test → build & push → deploy to EC2 |
+| Infrastructure | AWS EC2 **t2.small**, **Amazon Linux 2023**; Docker runs container `goldenowl-app` |
+| DNS & HTTPS | Cloudflare: A records → EC2, **SSL/TLS: Flexible** |
+
+---
+
+## 2. CI/CD Flow
+
+```mermaid
+flowchart LR
+  subgraph feature_branch [Feature branch]
+    A[Push / PR] --> B[CI: npm test]
+  end
+
+  subgraph master_branch [Master branch]
+    C[Merge / push master] --> D[CD: npm test]
+    D --> E[Build Docker image]
+    E --> F[Push to Docker Hub]
+    F --> G[SSH to EC2]
+    G --> H[docker pull and run]
+  end
+
+  H --> I[shuttlex.io.vn via Cloudflare]
+```
+
+**Rules:**
+
+- Push to `feature` or `feature/**` → **CI only** (no build, no deploy).
+- Merge a PR into `master` (or push directly to `master`) → **CD runs**: tests run again on `master`; if they pass, the image is built, pushed, and deployed.
+
+---
+
+## 3. GitHub Actions
+
+### 3.1 CI — `.github/workflows/ci.yml`
+
+| Trigger | Behavior |
+|---------|----------|
+| `push` / `pull_request` → `feature`, `feature/**` | `npm ci` → create `.env` from `ENV_CONTENT` secret → `npm test` |
+| `workflow_dispatch` | Run tests manually |
+
+### 3.2 CD — `.github/workflows/cd.yml`
+
+| Trigger | Behavior |
+|---------|----------|
+| `push` → `master` | Jobs **Test** → **Build and push image** → **Deploy to EC2** |
+| `workflow_dispatch` | Manual deploy (still test → build → deploy) |
+
+**Deploy on EC2 (summary):**
+
+1. Write `~/goldenowl-app/.env` from `ENV_CONTENT`.
+2. `docker login` → `docker pull` image `:latest`.
+3. Stop/remove the old container → `docker run` with `--env-file`, map ports from `PORT` in `.env` (default 80).
+
+---
+
+## 4. GitHub Secrets
+
+Configure under **Repository → Settings → Secrets and variables → Actions**:
+
+| Secret | Description |
+|--------|-------------|
+| `DOCKERHUB_USERNAME` | Docker Hub username |
+| `DOCKERHUB_TOKEN` | Access token (Docker Hub → Account Settings → Security) |
+| `EC2_HOST` | EC2 public IPv4 or public DNS |
+| `EC2_USER` | SSH user: **`ec2-user`** (Amazon Linux 2023) |
+| `EC2_SSH_PRIVATE_KEY` | Full contents of the `.pem` file (EC2 key pair) |
+| `ENV_CONTENT` | Full `.env` file content (multi-line), e.g. `PORT=80` |
+
+**Example `ENV_CONTENT`:**
+
+```env
+PORT=80
+```
+
+---
+
+## 5. Docker Hub
+
+1. Create repository: `goldenowl-devops-app` (public or private).
+2. After each successful CD run:
+   - `<DOCKERHUB_USERNAME>/goldenowl-devops-app:latest`
+   - `<DOCKERHUB_USERNAME>/goldenowl-devops-app:<git-sha>`
+
+Workflow build context: `src/` directory (uses `src/Dockerfile`).
+
+---
+
+## 6. AWS EC2 (t2.small)
+
+### 6.1 Create the instance
+
+- **AMI:** Amazon Linux 2023.
+- **Instance type:** `t2.small`.
+- **Key pair:** download `.pem`; put contents in `EC2_SSH_PRIVATE_KEY` secret.
+- **Security group (inbound):**
+
+| Port | Protocol | Source | Notes |
+|------|----------|--------|-------|
+| 22 | TCP | Your IP / (temporarily `0.0.0.0/0` if deploying via GitHub Actions) | SSH |
+| 80 | TCP | `0.0.0.0/0` | HTTP app (Cloudflare Flexible → origin HTTP) |
+
+### 6.2 Install Docker on EC2 (Amazon Linux 2023)
+
+First SSH session:
+
+```bash
+ssh -i your-key.pem ec2-user@<EC2_PUBLIC_IP>
+```
+
+Install Docker ( `docker` package from Amazon Linux repos):
+
+```bash
+sudo dnf update -y
+sudo dnf install -y docker
+sudo systemctl enable --now docker
+sudo usermod -aG docker ec2-user
+```
+
+Log out and SSH back in (or run `newgrp docker`), then verify:
+
+```bash
+docker run --rm hello-world
+```
+
+Set GitHub secret **`EC2_USER`** to `ec2-user`.
+
+After this, each merge to `master` triggers GitHub Actions to SSH into EC2 and pull/run the image.
+
+---
+
+## 7. Cloudflare — DNS & Flexible SSL
+
+Domain: **shuttlex.io.vn**
+
+### 7.1 DNS
+
+In Cloudflare → **DNS → Records** (actual configuration example):
+
+| Type | Name | Content | Proxy status | TTL |
+|------|------|---------|--------------|-----|
+| A | `@` (`shuttlex.io.vn`) | `32.197.204.35` | Proxied | Auto |
+| A | `www` | `32.197.204.35` | Proxied | Auto |
+
+- **`@`**: apex domain `https://shuttlex.io.vn`
+- **`www`**: subdomain `https://www.shuttlex.io.vn` (same EC2 origin)
+
+Wait for DNS propagation.
+
+### 7.2 SSL/TLS Flexible
+
+**SSL/TLS → Overview → Encryption mode:** **Flexible**
+
+- Browser ↔ Cloudflare: **HTTPS**
+- Cloudflare ↔ EC2: **HTTP** (port 80)
+
+EC2 only needs port **80** open; the container listens on `PORT=80`. No Let's Encrypt certificate on the origin is required when using Flexible mode.
+
+---
+
+## 8. Run the application locally (without Docker)
+
+```bash
+cd src
+npm i
+npm test
+npm start
+```
+
+Without a `.env` file, the app listens on port **3000** by default:
+
+```bash
+curl http://localhost:3000/
+```
+
+With `src/.env` containing `PORT=80`, use that port instead.
+
+---
+
+## 9. Build & run Docker locally
+
+From the `src` directory:
+
+```bash
+docker build -t goldenowl-devops-app:local .
+docker run -d --name goldenowl-app -p 80:80 --env-file .env goldenowl-devops-app:local
+curl http://localhost/
+```
+
+---
+
+## 10. Recommended workflow
+
+```bash
+# Develop on feature
+git checkout -b feature/...
+# ... commit ...
+git push origin feature/...
+# → GitHub runs CI (tests)
+
+# When ready, merge to master (PR or local merge)
+git checkout master
+git merge feature
+git push origin master
+# → GitHub runs CD: test → build/push Docker Hub → deploy EC2
+```
+
+Verify production:
+
+```bash
+curl https://shuttlex.io.vn/
+```
+
+---
+
+## 11. DevOps-related repository layout
+
+```text
+.github/workflows/
+  ci.yml          # Tests on feature
+  cd.yml          # Test + Docker Hub + EC2 on master
+src/
+  Dockerfile
+  index.js        # dotenv + listen PORT
+  server/
+  routes/
+  tests/
+```
+
+---
+
+## 12. Submission
+
+- Public GitHub repository (personal fork).
+- Deployment URL: **https://shuttlex.io.vn/**
+- Commit in stages (Dockerfile → CI → CD → README) to show clear progress.
+
+---
+
+*Golden Owl DevOps Internship — Technical Test. Infrastructure as code, automated CI/CD.*
