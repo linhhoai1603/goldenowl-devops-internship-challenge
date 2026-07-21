@@ -1,93 +1,98 @@
 # Golden Owl DevOps Internship — Report & Operations Guide
 
-**Deployed application:** [https://shuttlex.io.vn/](https://shuttlex.io.vn/)
+**Live deployment:** [https://shuttlex.io.vn/](https://shuttlex.io.vn/)
+
+Example response:
 
 ```json
 {"message":"Welcome warriors to Golden Owl!"}
 ```
 
-This submission meets the technical test requirements: Dockerized Node.js app, CI on the `feature` branch, CD to AWS EC2 via GitHub Actions, images stored on Docker Hub, and `shuttlex.io.vn` served through Cloudflare (Flexible SSL).
+This project dockerizes a Node.js API, runs **CI on `feature`**, and **CD on `master`**: build and push to Docker Hub, then deploy on **AWS EC2** with **Docker Compose** (Nginx load balancer + two app replicas). DNS and edge TLS are handled by **Cloudflare**; the origin uses **Nginx HTTPS** with a **Cloudflare Origin Certificate**.
 
 ---
 
-## 1. Solution Summary
+## 1. Solution summary
 
 | Item | Choice |
 |------|--------|
-| Application | Express (Node.js 20), `GET /` returns JSON |
-| Container | `src/Dockerfile` (Alpine, default port 80) |
+| Application | Express (Node.js 20), JSON API |
+| App image | `src/Dockerfile` (Alpine, `PORT=80` in container) |
 | Registry | Docker Hub — `linhhoai1603/goldenowl-devops-app` |
-| CI | Workflow `.github/workflows/ci.yml` — **tests only** on push/PR to `feature` |
-| CD | Workflow `.github/workflows/cd.yml` — on **push/merge to `master`**: re-test → build & push → deploy to EC2 |
-| Infrastructure | AWS EC2 **t2.small**, **Amazon Linux 2023**; Docker runs container `goldenowl-app` |
-| DNS & HTTPS | Cloudflare: A records → EC2, **SSL/TLS: Flexible** |
+| CI | `.github/workflows/ci.yml` — tests on push/PR to `feature` / `feature/**` |
+| CD | `.github/workflows/cd.yml` — on push to `master`: test → build/push → deploy stack on EC2 |
+| Compute | EC2 **t2.small**, **Amazon Linux 2023** |
+| Runtime on EC2 | **Docker Compose**: `nginx` + `app1` + `app2` (round-robin upstream) |
+| Edge | Cloudflare DNS (proxied A records) + HTTPS to visitors |
+| Origin TLS | Nginx `:443` with certs in `~/goldenowl-app/nginx/certs/` |
+
+### API routes
+
+| Method | Path | Response (example) |
+|--------|------|---------------------|
+| GET | `/` | `{"message":"Welcome warriors to Golden Owl!"}` |
+| GET | `/ci-cd` | `{"message":"CI/CD is working!"}` |
+| GET | `/hello` | `{"message":"Hello World!"}` |
 
 ---
 
-## 2. CI/CD Flow
+## 2. Request flow (production)
 
 ```mermaid
 flowchart LR
-  subgraph feature_branch [Feature branch]
-    A[Push / PR] --> B[CI: npm test]
-  end
-
-  subgraph master_branch [Master branch]
-    C[Merge / push master] --> D[CD: npm test]
-    D --> E[Build Docker image]
-    E --> F[Push to Docker Hub]
-    F --> G[SSH to EC2]
-    G --> H[docker pull and run]
-  end
-
-  H --> I[shuttlex.io.vn via Cloudflare]
+  U[Browser HTTPS] --> CF[Cloudflare]
+  CF -->|HTTPS :443 recommended| NGX[Nginx on EC2]
+  NGX -->|HTTP round-robin| A1[app1]
+  NGX --> A2[app2]
+  A1 --> R[Express]
+  A2 --> R
 ```
 
-**Rules:**
-
-- Push to `feature` or `feature/**` → **CI only** (no build, no deploy).
-- Merge a PR into `master` (or push directly to `master`) → **CD runs**: tests run again on `master`; if they pass, the image is built, pushed, and deployed.
+1. User hits `https://shuttlex.io.vn` → **Cloudflare** (edge HTTPS).
+2. Cloudflare forwards to the origin (use **Full** or **Full (strict)** when Nginx serves HTTPS on **443**).
+3. **Nginx** terminates TLS on **443**, proxies to **`app1`** and **`app2`** on the Compose network.
+4. Port **80** on Nginx only returns **301 → HTTPS** (no plain HTTP app traffic on origin).
 
 ---
 
-## 3. GitHub Actions
+## 3. CI/CD flow
 
-### 3.1 CI — `.github/workflows/ci.yml`
+```mermaid
+flowchart LR
+  subgraph feature [Feature branch]
+    F1[Push / PR] --> F2[CI: npm test]
+  end
+  subgraph master [Master branch]
+    M1[Push / merge master] --> M2[CD: npm test]
+    M2 --> M3[Build and push image]
+    M3 --> M4[SCP compose + nginx config]
+    M4 --> M5[docker compose pull and up]
+  end
+  M5 --> LIVE[shuttlex.io.vn]
+```
 
-| Trigger | Behavior |
-|---------|----------|
-| `push` / `pull_request` → `feature`, `feature/**` | `npm ci` → create `.env` from `ENV_CONTENT` secret → `npm test` |
-| `workflow_dispatch` | Run tests manually |
-
-### 3.2 CD — `.github/workflows/cd.yml`
-
-| Trigger | Behavior |
-|---------|----------|
-| `push` → `master` | Jobs **Test** → **Build and push image** → **Deploy to EC2** |
-| `workflow_dispatch` | Manual deploy (still test → build → deploy) |
-
-**Deploy on EC2 (summary):**
-
-1. Write `~/goldenowl-app/.env` from `ENV_CONTENT`.
-2. `docker login` → `docker pull` image `:latest`.
-3. Stop/remove the old container → `docker run` with `--env-file`, map ports from `PORT` in `.env` (default 80).
+| Event | Workflow | Actions |
+|-------|----------|---------|
+| Push/PR → `feature`, `feature/**` | **CI** | `npm ci`, optional `.env` from secret, `npm test` |
+| Push → `master` | **CD** | Test again → build/push Docker Hub → copy `docker-compose.yml` + `nginx/default.conf` → SSH deploy stack |
+| `workflow_dispatch` | CI or CD | Manual run |
 
 ---
 
 ## 4. GitHub Secrets
 
-Configure under **Repository → Settings → Secrets and variables → Actions**:
+**Settings → Secrets and variables → Actions**
 
 | Secret | Description |
 |--------|-------------|
 | `DOCKERHUB_USERNAME` | Docker Hub username |
-| `DOCKERHUB_TOKEN` | Access token (Docker Hub → Account Settings → Security) |
-| `EC2_HOST` | EC2 public IPv4 or public DNS |
-| `EC2_USER` | SSH user: **`ec2-user`** (Amazon Linux 2023) |
-| `EC2_SSH_PRIVATE_KEY` | Full contents of the `.pem` file (EC2 key pair) |
-| `ENV_CONTENT` | Full `.env` file content (multi-line), e.g. `PORT=80` |
+| `DOCKERHUB_TOKEN` | Docker Hub access token |
+| `EC2_HOST` | EC2 public IP or DNS |
+| `EC2_USER` | `ec2-user` (Amazon Linux 2023) |
+| `EC2_SSH_PRIVATE_KEY` | Full `.pem` private key |
+| `ENV_CONTENT` | Multi-line `.env` for the app, e.g. `PORT=80` |
 
-**Example `ENV_CONTENT`:**
+Example `ENV_CONTENT`:
 
 ```env
 PORT=80
@@ -97,88 +102,108 @@ PORT=80
 
 ## 5. Docker Hub
 
-1. Create repository: `goldenowl-devops-app` (public or private).
-2. After each successful CD run:
-   - `<DOCKERHUB_USERNAME>/goldenowl-devops-app:latest`
-   - `<DOCKERHUB_USERNAME>/goldenowl-devops-app:<git-sha>`
+Repository: **`goldenowl-devops-app`**
 
-Workflow build context: `src/` directory (uses `src/Dockerfile`).
+Tags on each successful CD:
+
+- `linhhoai1603/goldenowl-devops-app:latest`
+- `linhhoai1603/goldenowl-devops-app:<git-sha>`
+
+Build context: **`src/`** (`src/Dockerfile`).
 
 ---
 
-## 6. AWS EC2 (t2.small)
+## 6. Production stack (Docker Compose)
 
-### 6.1 Create the instance
+File: **`docker-compose.yml`** at repo root.
 
-- **AMI:** Amazon Linux 2023.
-- **Instance type:** `t2.small`.
-- **Key pair:** download `.pem`; put contents in `EC2_SSH_PRIVATE_KEY` secret.
-- **Security group (inbound):**
+| Service | Role |
+|---------|------|
+| `app1`, `app2` | Same image (`DOCKER_IMAGE`), internal port 80, env from `./.env` |
+| `nginx` | Publishes **80** and **443**; load balances to `app1` / `app2` |
 
-| Port | Protocol | Source | Notes |
-|------|----------|--------|-------|
-| 22 | TCP | Your IP / (temporarily `0.0.0.0/0` if deploying via GitHub Actions) | SSH |
-| 80 | TCP | `0.0.0.0/0` | HTTP app (Cloudflare Flexible → origin HTTP) |
+Nginx config: **`nginx/default.conf`** (upstream + HTTP→HTTPS redirect + SSL proxy).
 
-### 6.2 Install Docker on EC2 (Amazon Linux 2023)
+### Origin certificates (one-time on EC2)
 
-First SSH session:
+Place files on the server (not in git):
+
+```text
+/home/ec2-user/goldenowl-app/nginx/certs/cloudflare.crt
+/home/ec2-user/goldenowl-app/nginx/certs/cloudflare.key
+```
+
+Create a **Cloudflare Origin Certificate** (SSL/TLS → Origin Server) for `shuttlex.io.vn` and `*.shuttlex.io.vn`, then save PEM/key with the names above. CD creates the `certs` directory but **does not** overwrite existing cert files.
+
+```bash
+chmod 700 ~/goldenowl-app/nginx/certs
+chmod 600 ~/goldenowl-app/nginx/certs/cloudflare.*
+```
+
+---
+
+## 7. AWS EC2 (t2.small)
+
+### 7.1 Instance
+
+- **AMI:** Amazon Linux 2023  
+- **Type:** `t2.small`  
+- **SSH user:** `ec2-user`  
+
+**Security group (inbound):**
+
+| Port | Purpose |
+|------|---------|
+| 22 | SSH (restrict source IP when possible) |
+| 80 | HTTP → Nginx redirect to HTTPS |
+| 443 | HTTPS → Nginx → apps |
+
+### 7.2 One-time setup on EC2
 
 ```bash
 ssh -i your-key.pem ec2-user@<EC2_PUBLIC_IP>
-```
 
-Install Docker ( `docker` package from Amazon Linux repos):
-
-```bash
 sudo dnf update -y
-sudo dnf install -y docker
+sudo dnf install -y docker docker-compose-plugin
 sudo systemctl enable --now docker
 sudo usermod -aG docker ec2-user
-```
-
-Log out and SSH back in (or run `newgrp docker`), then verify:
-
-```bash
+# log out and back in
+docker compose version
 docker run --rm hello-world
 ```
 
-Set GitHub secret **`EC2_USER`** to `ec2-user`.
+Add origin certs under `~/goldenowl-app/nginx/certs/` before the first Nginx start with SSL.
 
-After this, each merge to `master` triggers GitHub Actions to SSH into EC2 and pull/run the image.
+After **`master`** is pushed, GitHub Actions copies compose/nginx config and runs `docker compose pull && docker compose up -d` in `~/goldenowl-app`.
 
 ---
 
-## 7. Cloudflare — DNS & Flexible SSL
+## 8. Cloudflare
 
 Domain: **shuttlex.io.vn**
 
-### 7.1 DNS
+### 8.1 DNS
 
-In Cloudflare → **DNS → Records** (actual configuration example):
+| Type | Name | Content | Proxy |
+|------|------|---------|-------|
+| A | `@` | `32.197.204.35` | Proxied |
+| A | `www` | `32.197.204.35` | Proxied |
 
-| Type | Name | Content | Proxy status | TTL |
-|------|------|---------|--------------|-----|
-| A | `@` (`shuttlex.io.vn`) | `32.197.204.35` | Proxied | Auto |
-| A | `www` | `32.197.204.35` | Proxied | Auto |
+### 8.2 SSL mode
 
-- **`@`**: apex domain `https://shuttlex.io.vn`
-- **`www`**: subdomain `https://www.shuttlex.io.vn` (same EC2 origin)
+Because Nginx on the origin serves **HTTPS on 443** and redirects **HTTP → HTTPS**, set Cloudflare to:
 
-Wait for DNS propagation.
+- **SSL/TLS encryption mode:** **Full (strict)** (recommended), with the **Origin Certificate** on Nginx  
 
-### 7.2 SSL/TLS Flexible
+Do **not** use **Flexible** with this Nginx config (origin expects TLS on 443; port 80 is redirect-only).
 
-**SSL/TLS → Overview → Encryption mode:** **Flexible**
-
-- Browser ↔ Cloudflare: **HTTPS**
-- Cloudflare ↔ EC2: **HTTP** (port 80)
-
-EC2 only needs port **80** open; the container listens on `PORT=80`. No Let's Encrypt certificate on the origin is required when using Flexible mode.
+Optional: **Always Use HTTPS** at the edge.
 
 ---
 
-## 8. Run the application locally (without Docker)
+## 9. Run locally
+
+### Node (no Docker)
 
 ```bash
 cd src
@@ -187,61 +212,67 @@ npm test
 npm start
 ```
 
-Without a `.env` file, the app listens on port **3000** by default:
+Default port without `.env`: **3000** (`curl http://localhost:3000/`).
+
+### Single container
 
 ```bash
-curl http://localhost:3000/
-```
-
-With `src/.env` containing `PORT=80`, use that port instead.
-
----
-
-## 9. Build & run Docker locally
-
-From the `src` directory:
-
-```bash
+cd src
 docker build -t goldenowl-devops-app:local .
-docker run -d --name goldenowl-app -p 80:80 --env-file .env goldenowl-devops-app:local
-curl http://localhost/
+docker run -d --name goldenowl-app -p 8080:80 --env-file .env goldenowl-devops-app:local
+curl http://localhost:8080/
+```
+
+### Compose stack (Nginx + 2 apps)
+
+From repo root (requires origin certs for Nginx 443, or temporarily adjust `nginx/default.conf` for local HTTP-only testing):
+
+```bash
+cp src/.env .env
+export DOCKER_IMAGE=linhhoai1603/goldenowl-devops-app:latest
+docker compose pull   # or build from src by temporarily adding build: to compose
+docker compose up -d
+curl -k https://localhost/   # if certs present and mapped 443:443
 ```
 
 ---
 
-## 10. Recommended workflow
+## 10. Git workflow
 
 ```bash
-# Develop on feature
-git checkout -b feature/...
-# ... commit ...
-git push origin feature/...
-# → GitHub runs CI (tests)
+git checkout -b feature/my-change
+# commit ...
+git push origin feature/my-change
+# → CI runs tests
 
-# When ready, merge to master (PR or local merge)
 git checkout master
-git merge feature
+git merge feature/my-change
 git push origin master
-# → GitHub runs CD: test → build/push Docker Hub → deploy EC2
+# → CD: test, push image, deploy Compose on EC2
 ```
 
-Verify production:
+Verify:
 
 ```bash
 curl https://shuttlex.io.vn/
+curl https://shuttlex.io.vn/ci-cd
 ```
 
 ---
 
-## 11. DevOps-related repository layout
+## 11. Repository layout
 
 ```text
 .github/workflows/
-  ci.yml          # Tests on feature
-  cd.yml          # Test + Docker Hub + EC2 on master
+  ci.yml                 # Feature branch tests
+  cd.yml                 # Master: test, Docker Hub, EC2 Compose deploy
+docker-compose.yml       # nginx + app1 + app2
+nginx/
+  default.conf           # LB, redirect, SSL proxy
+  certs/                 # cloudflare.crt / .key on server only (.gitignore)
 src/
   Dockerfile
-  index.js        # dotenv + listen PORT
+  index.js
   server/
   routes/
   tests/
@@ -251,10 +282,10 @@ src/
 
 ## 12. Submission
 
-- Public GitHub repository (personal fork).
-- Deployment URL: **https://shuttlex.io.vn/**
-- Commit in stages (Dockerfile → CI → CD → README) to show clear progress.
+- Public GitHub fork with incremental commits  
+- Deployment URL: **https://shuttlex.io.vn/**  
+- Implements: Docker, GitHub Actions CI/CD, Docker Hub, EC2 deploy, load-balanced Nginx, Cloudflare DNS/TLS  
 
 ---
 
-*Golden Owl DevOps Internship — Technical Test. Infrastructure as code, automated CI/CD.*
+*Golden Owl DevOps Internship — Technical Test.*
