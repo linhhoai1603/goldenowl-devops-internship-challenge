@@ -9,18 +9,5 @@ router.get('/', (req, res) => {
     }
     res.json(responseJson)
 })
-router.get('/ci-cd', (req, res) => {
-    const responseJson = {
-        message: 'CI/CD is working!',
-    }
-    res.json(responseJson)
-})
-router.get('/hello', (req, res) => {
-    const responseJson = {
-        message: 'Hello World!',
-    }
-    res.json(responseJson)
-})
-
 
 module.exports = router
