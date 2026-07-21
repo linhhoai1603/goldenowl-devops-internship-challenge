@@ -38,38 +38,22 @@ This project dockerizes a Node.js API, runs **CI on `feature`**, and **CD on `ma
 
 ## 2. Request flow (production)
 
-```mermaid
-flowchart LR
-  U[Browser HTTPS] --> CF[Cloudflare]
-  CF -->|HTTPS :443 recommended| NGX[Nginx on EC2]
-  NGX -->|HTTP round-robin| A1[app1]
-  NGX --> A2[app2]
-  A1 --> R[Express]
-  A2 --> R
-```
+![Production traffic architecture](docs/production_traffic_diagram.jpg)
+
+*Diagram: Browser → Cloudflare (Full strict) → EC2 Nginx (443 TLS, 80 redirect) → load-balanced `app1` / `app2` (Express).*
 
 1. User hits `https://shuttlex.io.vn` → **Cloudflare** (edge HTTPS).
-2. Cloudflare forwards to the origin (use **Full** or **Full (strict)** when Nginx serves HTTPS on **443**).
-3. **Nginx** terminates TLS on **443**, proxies to **`app1`** and **`app2`** on the Compose network.
+2. Cloudflare forwards to the origin over **HTTPS :443** (**Full (strict)** + Origin Certificate on Nginx).
+3. **Nginx** terminates TLS on **443**, proxies to **`app1`** and **`app2`** on the Compose network (round-robin).
 4. Port **80** on Nginx only returns **301 → HTTPS** (no plain HTTP app traffic on origin).
 
 ---
 
 ## 3. CI/CD flow
 
-```mermaid
-flowchart LR
-  subgraph feature [Feature branch]
-    F1[Push / PR] --> F2[CI: npm test]
-  end
-  subgraph master [Master branch]
-    M1[Push / merge master] --> M2[CD: npm test]
-    M2 --> M3[Build and push image]
-    M3 --> M4[SCP compose + nginx config]
-    M4 --> M5[docker compose pull and up]
-  end
-  M5 --> LIVE[shuttlex.io.vn]
-```
+![CI/CD pipeline — GitHub Actions, Docker Hub, EC2](docs/ci_cd_pipeline_diagram.jpg)
+
+*Diagram: `feature` → CI (Ubuntu runner, Jest) · `master` → CD (test → build/push → SCP + SSH → `docker compose` on EC2).*
 
 | Event | Workflow | Actions |
 |-------|----------|---------|
@@ -263,6 +247,9 @@ curl https://shuttlex.io.vn/ci-cd
 ## 11. Repository layout
 
 ```text
+docs/
+  production_traffic_diagram.jpg   # Architecture — production traffic
+  ci_cd_pipeline_diagram.jpg       # Architecture — CI/CD pipeline
 .github/workflows/
   ci.yml                 # Feature branch tests
   cd.yml                 # Master: test, Docker Hub, EC2 Compose deploy
@@ -284,6 +271,7 @@ src/
 
 - Public GitHub fork with incremental commits  
 - Deployment URL: **https://shuttlex.io.vn/**  
+- Architecture diagrams: [`docs/production_traffic_diagram.jpg`](docs/production_traffic_diagram.jpg), [`docs/ci_cd_pipeline_diagram.jpg`](docs/ci_cd_pipeline_diagram.jpg)  
 - Implements: Docker, GitHub Actions CI/CD, Docker Hub, EC2 deploy, load-balanced Nginx, Cloudflare DNS/TLS  
 
 ---
