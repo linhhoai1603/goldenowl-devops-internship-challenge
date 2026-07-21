@@ -26,14 +26,6 @@ This project dockerizes a Node.js API, runs **CI on `feature`**, and **CD on `ma
 | Edge | Cloudflare DNS (proxied A records) + HTTPS to visitors |
 | Origin TLS | Nginx `:443` with certs in `~/goldenowl-app/nginx/certs/` |
 
-### API routes
-
-| Method | Path | Response (example) |
-|--------|------|---------------------|
-| GET | `/` | `{"message":"Welcome warriors to Golden Owl!"}` |
-| GET | `/ci-cd` | `{"message":"CI/CD is working!"}` |
-| GET | `/hello` | `{"message":"Hello World!"}` |
-
 ---
 
 ## 2. Request flow (production)
@@ -177,7 +169,7 @@ Domain: **shuttlex.io.vn**
 
 Because Nginx on the origin serves **HTTPS on 443** and redirects **HTTP → HTTPS**, set Cloudflare to:
 
-- **SSL/TLS encryption mode:** **Full (strict)** (recommended), with the **Origin Certificate** on Nginx  
+- **SSL/TLS encryption mode:** **Full** , with the **Origin Certificate** on Nginx  
 
 Do **not** use **Flexible** with this Nginx config (origin expects TLS on 443; port 80 is redirect-only).
 
